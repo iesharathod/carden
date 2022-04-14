@@ -1,0 +1,157 @@
+// Instructions:
+//
+//	https://support.sizmek.com/hc/en-us/articles/200723239
+//
+//
+//  The following script should be placed within the <head> of the page, or as the first element of the <body>:
+// <script src="http://ds.serving-sys.com/BurstingRes/CustomScripts/mmConversionTagV6.js"></script>
+//
+//	
+//
+// Author: 	Tia Koehler
+// Date:	04.29.11
+// 
+// Edited: 	Jason Brown
+// Date:  	07.16.12 
+// V3:		Added the ability to call publisher functions and redirect as long as the target is not '_SELF'.  
+// 
+// Edited: 	Tia Koehler
+// Date:  	10.11.12 
+// V4:		Added the ability to "append" the our tags to the page, instead of "write" them for scenarios where the page is already loaded.  Specifically requested by VML.
+//
+// Edited: 	Jason Brown
+// Date:  	12.16.15 
+// V6:		Changed Mechanism to wait for iframe load before redirecting user if "_self" is used as a target.
+
+
+//-------------------------------------------------------------------------------------------
+function mmCreateConversionTagHolder(id) {
+	// Create Conversion Tag Holders If None Exist
+
+	var ifrm = document.createElement("iframe");
+	ifrm.id = "mmConversionTagIframe" + id;
+	ifrm.name = "mmConversionTagIframe" + id;
+	ifrm.style.width = "0";
+	ifrm.style.height = "0";
+	ifrm.style.hspace = "0";
+	ifrm.style.vspace = "0";
+	ifrm.style.frameboarder = "0";
+	ifrm.style.scrolling = "no";
+	ifrm.style.borderColor = "#000000";
+	ifrm.style.display = "none";
+
+	document.body.appendChild(ifrm);	
+}
+//-------------------------------------------------------------------------------------------
+function mmRedirect(url, target) {
+    // Open Redirect URL in New or Same Window	
+    if (typeof (target) != "undefined" && target.toUpperCase() == "_SELF") {
+        document.location.href = url;
+    } 
+    else {
+        window.open(url, "_blank");
+    }
+}
+//-------------------------------------------------------------------------------------------
+function mmExecutePublisherCode(clkEvt) {
+
+    // Removes the call to mmConversionTag so that it is not executed more than 1 time
+    
+    var patt1 = /\bmmConversionTag?.*?return?\s?false?\;/i;
+    var clickEventStr = typeof (clkEvt.replace) == "undefined" ? clkEvt.toString() : clkEvt;
+    var clickEventStrRemaining = clickEventStr.replace(patt1, "");
+    
+    if (typeof (clkEvt.replace) == "undefined") {
+        // Removes "function anonymous() { ... }" to extract the ... publisher code in the middle.  Necessary for setTimeout to execute it 
+        var patt2 = /\bfunction\s?\w*\(\)?.*?\n/i;
+        var clickEventStrRemaining = clickEventStrRemaining.replace(patt2, "");
+        var patt3 = /^\{/i;
+        clickEventStrRemaining = clickEventStrRemaining.replace(patt3, "");
+        var patt4 = /\}$/i;
+        clickEventStrRemaining = clickEventStrRemaining.replace(patt4, "");
+    }
+
+    // Execute Publisher Code
+    setTimeout(clickEventStrRemaining, 1);
+}
+//-------------------------------------------------------------------------------------------
+function mmIframeLoadHandler(redirURL, targetWin, clickEvent, ifrm) {
+
+    // Clear out source so that pressing the back button does not cause a conversion (from iframe being on page)
+    ifrm.src = "";
+
+    // Remove Event Handlers
+    if (ifrm.detachEvent) {
+        ifrm.detachEvent("onload", ifrm.mmIframeLoadHandlerRef);
+    } 
+    else if (ifrm.removeEventListener) {
+        ifrm.removeEventListener("load", ifrm.mmIframeLoadHandlerRef, false);
+    } else {
+		ifrm.onload = null;
+	}
+	if ((typeof (redirURL) != "undefined") && (redirURL != null) && targetWin.toUpperCase() == "_SELF") {
+        mmRedirect(redirURL, targetWin);
+    }
+}
+//-------------------------------------------------------------------------------------------
+function mmConversionTag(conversionID, obj, targetWindow, redirectURL, extraParams) {
+    try {
+		
+		// Create Conversion Tag Iframe Holder
+		mmCreateConversionTagHolder(conversionID);
+		
+        var onclickEvent = "";
+
+        // Redirect URL doesn't exist, so search the object for the URL or the functions which perform the redirect
+        if (typeof (obj == "object") && typeof (obj.getAttribute) != "undefined") {
+            if (obj.getAttribute("onclick") != null) {
+                onclickEvent = obj.getAttribute("onclick");
+            }
+        }
+
+        // Protocol (secure or insecure)
+        var protocol = ('https:' == document.location.protocol) ? 'https://' : 'http://';
+
+        // Cache Buster
+        var ebRand = Math.round(Math.random() * 1000000);
+
+        // extraParams like Session ID or Sales Varaibles weren't passed, so this is a counter tag
+        if (typeof (extraParams) == "undefined") {
+            extraParams = "";
+        }
+
+        // Iframe
+        var iframe = document.getElementById("mmConversionTagIframe" + conversionID);
+        
+        // Iframe Onload Event Handlers
+        if (iframe.attachEvent) {
+            iframe.attachEvent("onload", iframe.mmIframeLoadHandlerRef = function() {
+                mmIframeLoadHandler(redirectURL, targetWindow, onclickEvent, iframe);
+            });
+        } 
+        else if (iframe.addEventListener) {
+            iframe.addEventListener("load", iframe.mmIframeLoadHandlerRef = function() {
+                mmIframeLoadHandler(redirectURL, targetWindow, onclickEvent, iframe);
+            }, false);
+        } 
+        else {
+            iframe.onload = function() {
+                mmIframeLoadHandler(redirectURL, targetWindow, onclickEvent, iframe);
+            }
+        }
+
+        // Moved this code from the mmIframeLoadHandler() to detach the redirect function from the onLoad of the iframe
+        if ((typeof (redirectURL) != "undefined") && (redirectURL != null) && targetWindow.toUpperCase() != "_SELF") {
+            mmRedirect(redirectURL, targetWindow);
+        }
+        if ((targetWindow == null || typeof (targetWindow) == 'undefined' || (typeof (targetWindow) != 'undefined' && targetWindow.toUpperCase() != "_SELF")) && onclickEvent != "") {
+            mmExecutePublisherCode(onclickEvent);
+        }
+
+        // Iframe Source
+        iframe.src = protocol + "bs.serving-sys.com/BurstingPipe/ActivityServer.bs?cn=as&ifrm=1&ActivityID=" + conversionID + extraParams + "&rnd=" + ebRand;
+    } 
+    catch (e) {
+    }
+}
+//-------------------------------------------------------------------------------------------
